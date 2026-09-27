@@ -405,6 +405,26 @@ async def test_call_injects_agent_context_id_into_subprocess_env(monkeypatch):
     assert answer == "buffered ok"
 
 
+def test_spawn_debug_line_never_carries_the_prompt():
+    """The visitor's question must not reach a log line, not even at DEBUG.
+
+    `_build_cmd` places the prompt at cmd[2]; the earlier `" ".join(cmd[:6])`
+    therefore logged it in full. It stayed unnoticed because the service runs at
+    INFO — one LOG_LEVEL away from shipping visitor text to whatever sink the
+    runtime exports to.
+    """
+    from _runtime.runner import _describe
+
+    secret = "Ich heisse Erika Musterfrau und suche einen Termin am Dienstag"
+    cmd = ["/usr/bin/claude", "-p", secret, "--model", "sonnet",
+           "--output-format", "json", "--append-system-prompt", "PERSONA"]
+    line = _describe(cmd)
+    assert secret not in line
+    assert "Erika" not in line
+    assert "PERSONA" not in line
+    assert "sonnet" in line and "claude" in line
+
+
 # ---------------------------------------------------------------------------
 # Trust profile: public (default, byte-identical to pre-feature behavior) vs
 # private (relaxed) argv shape. config.py owns fail-closed RESOLUTION of the

@@ -18,6 +18,24 @@ from typing import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
+
+def _describe(cmd: list[str]) -> str:
+    """A spawn line WITHOUT the visitor's text.
+
+    ``_build_cmd`` puts the prompt at ``cmd[2]`` (``-p <prompt>``), so the earlier
+    ``" ".join(cmd[:6])`` logged the full question — the opposite of what the
+    slice suggested it was doing. It only stayed invisible because the line is
+    DEBUG and the service runs at INFO. That is a configuration away from a leak,
+    and since the runtime can ship logs to a shared sink, the sink would be a
+    cluster other people read. Binary and model are enough to debug a spawn.
+    """
+    model = ""
+    if "--model" in cmd:
+        index = cmd.index("--model")
+        if index + 1 < len(cmd):
+            model = cmd[index + 1]
+    return f"{cmd[0]} --model {model} ({len(cmd)} args, prompt redacted)"
+
 # claude -p ``--output-format stream-json`` emits each event as ONE NDJSON line.
 # A ``Read`` tool_result embeds the whole file as a single line (the grounding CV
 # is ~104 KiB), which blows past asyncio's DEFAULT 64 KiB StreamReader line limit
@@ -220,7 +238,7 @@ class SubprocessClaudeRunner:
         ``resume_session_id`` is forwarded to ``_build_cmd`` (private trust only).
         """
         cmd = self._build_cmd(prompt, stream=False, resume_session_id=resume_session_id)
-        logger.debug("claude_runner: spawning %s", " ".join(cmd[:6]))
+        logger.debug("claude_runner: spawning %s", _describe(cmd))
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -286,7 +304,7 @@ class SubprocessClaudeRunner:
         ``resume_session_id`` is forwarded to ``_build_cmd`` (private trust only).
         """
         cmd = self._build_cmd(prompt, stream=True, resume_session_id=resume_session_id)
-        logger.debug("claude_runner: streaming %s", " ".join(cmd[:6]))
+        logger.debug("claude_runner: streaming %s", _describe(cmd))
 
         try:
             proc = await asyncio.create_subprocess_exec(

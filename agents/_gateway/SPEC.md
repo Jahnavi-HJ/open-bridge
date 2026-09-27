@@ -18,7 +18,10 @@ frontends people actually use. Pure translation layer — no model, no reasoning
 All wire/SDK claims in this spec were verified against live sources on 2026-07-18:
 the A2A v1.0.1 specification text (raw `specification.md`), the `a2a-python` repo,
 a hands-on `mcp==1.28.1` install (server + client exercised end-to-end), and the
-`agents/_runtime` code on this branch. Where older prose and verified behavior
+`agents/_runtime` code on this branch. **Update 2026-09-27:** the server moved to
+`mcp` 2.x (verified on 2.2.0): `FastMCP` became `MCPServer`, the transport options
+moved from the constructor to `run()` / `streamable_http_app()`, and `Context` carries
+the request headers itself. TRN-1, TRN-3 and decision 5 below are updated to match. Where older prose and verified behavior
 diverged, this spec pins the **verified behavior** and notes the divergence inline.
 
 ---
@@ -61,7 +64,7 @@ OAuth 2.1 seam — plugging in OAuth changes the resolver, never the tools.
 MCP client (Claude / ChatGPT Dev Mode / Gemini)
    │  Streamable HTTP  POST /mcp   [Authorization: Bearer <gateway token>]  (optional)
    ▼
-FastMCP server (stateless_http=True, json_response=True)         server.py
+MCPServer (stateless_http=True, json_response=True)             server.py
    │  header → AccessTier                                        tiers.py
    │  bridge id → BridgeEntry                                    registry.py
    │  per-bridge concurrency gate                                server.py (BridgeGate)
@@ -83,7 +86,7 @@ Modules (each independently buildable against § 5 pinned interfaces):
 | `gateway/tiers.py` | `AccessTier`, `TierResolver` — the single auth/visibility decision point |
 | `gateway/a2a_client.py` | Card fetch/normalize (dual dialect) + `send_message` (dual wire) |
 | `gateway/config.py` | `GatewayConfig`: defaults ← YAML ← ENV |
-| `gateway/server.py` | `GatewayService` (tool logic), `build_server` (FastMCP wiring), `main` |
+| `gateway/server.py` | `GatewayService` (tool logic), `build_server` (MCPServer wiring), `main` |
 
 ### Decision log (fixed — do not re-litigate during build)
 
@@ -93,7 +96,7 @@ Modules (each independently buildable against § 5 pinned interfaces):
 2. **Stateless conversation mapping.** `conversation` IS the upstream A2A `contextId`,
    passed through verbatim (opaque to the MCP client, per spec §3.4.1 "SHOULD be
    treated as opaque"). No gateway-side table, survives restarts, zero memory growth.
-3. **Errors are returned, not raised, at the tool boundary.** Verified: FastMCP wraps
+3. **Errors are returned, not raised, at the tool boundary.** Verified: the MCP server wraps
    raised exceptions in a prefixed plain-text `isError` result — not machine-parseable —
    and only *typed* return annotations produce `outputSchema`/`structuredContent`
    (an untyped `dict` return does NOT). Therefore every tool returns one concrete
@@ -101,10 +104,10 @@ Modules (each independently buildable against § 5 pinned interfaces):
    subclasses; `server.py` converts at the boundary.
 4. **Invalid bearer token → `unauthorized` error, never silent anonymous downgrade.**
    A typo'd token must be visible, and OAuth later needs the same hard failure.
-5. **Header access via `ctx.request_context.request`.** Verified on `mcp==1.28.1`:
-   `get_http_request()` does NOT exist in this version; the working path is a
-   `Context`-annotated tool parameter and the raw Starlette request on its
-   `request_context`.
+5. **Header access via the `Context` parameter.** On `mcp` 2.x (verified 2.2.0) a
+   `Context`-annotated tool parameter exposes `ctx.headers` (None on stdio). On
+   1.28.1 the same came from `ctx.request_context.request`; `get_http_request()`
+   never existed.
 6. **Card TTL cache (default 300 s) inside `a2a_client.fetch_card` callers** — a pure
    in-process cache in `server.py`, not persistent state. `card_cache_ttl_s: 0` disables.
 7. **The gateway's client-facing bearer tokens and the per-bridge upstream credentials
@@ -290,15 +293,16 @@ ENV always wins. Keys and defaults:
 
 ### Transport (TRN)
 
-- **TRN-1** The server shall be FastMCP with `stateless_http=True`,
-  `json_response=True`, `streamable_http_path="/mcp"`, served by uvicorn on one
-  host:port (verified constructor kwargs on `mcp==1.28.1`).
+- **TRN-1** The server shall be an `MCPServer` served over Streamable HTTP with
+  `stateless_http=True`, `json_response=True`, `streamable_http_path="/mcp"` on one
+  host:port. On `mcp` 2.x these are `run()` / `streamable_http_app()` options, not
+  constructor kwargs; `GatewayMCP` in `server.py` holds them so both paths agree.
 - **TRN-2** All three tools shall have fully typed parameters and TypedDict returns so
   the SDK emits `outputSchema` and `structuredContent` (verified: only typed returns
   get this; plain `dict` does not).
 - **TRN-3** Tool handlers shall obtain the `Authorization` header via a
-  `Context`-annotated parameter → `ctx.request_context.request.headers.get("authorization")`
-  (verified path on 1.28.1; `get_http_request()` does not exist there).
+  `Context`-annotated parameter → `ctx.headers.get("authorization")` (mcp 2.x;
+  `ctx.headers` is None without an HTTP transport, which resolves as no header).
 - **TRN-4** `python -m gateway` shall run `server.main()` (flags:
   `--config`, `--registry`, `--host`, `--port` — flags beat ENV beats YAML).
 
@@ -486,7 +490,7 @@ def load_config(
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 import httpx
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 from gateway.config import GatewayConfig
 from gateway.errors import ErrorInfo
 from gateway.registry import Registry
@@ -546,9 +550,9 @@ class GatewayService:
 def build_server(
     config: GatewayConfig, registry: Registry, *,
     http: httpx.AsyncClient | None = None,
-) -> FastMCP: ...
-    # FastMCP(name="bridge-gateway", host=..., port=..., stateless_http=True,
-    #         json_response=True, streamable_http_path="/mcp")
+) -> GatewayMCP: ...
+    # GatewayMCP(name="bridge-gateway", port=..., transport_options={host, stateless_http=True,
+    #            json_response=True, streamable_http_path="/mcp", transport_security})
     # Tool signatures registered (Context param excluded from the client schema):
     #   async def list_bridges(ctx: Context) -> ListBridgesResult
     #   async def get_bridge_card(bridge: str, ctx: Context) -> GetBridgeCardResult

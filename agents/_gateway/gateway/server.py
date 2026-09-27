@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 import httpx
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
 from gateway.a2a_client import NormalizedCard, fetch_card, send_message
@@ -236,13 +236,35 @@ class GatewayService:
         return card
 
 
+class GatewayMCP(MCPServer):
+    """MCPServer that remembers its Streamable-HTTP options.
+
+    mcp 2.x moved host, path, statelessness and transport security from the
+    constructor to ``run()`` / ``streamable_http_app()``. Holding them here keeps
+    ``build_server`` the one place they are decided, for both the served process
+    and the in-process app the integration tests drive.
+    """
+
+    def __init__(self, *, transport_options: dict[str, Any], port: int, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._transport_options = dict(transport_options)
+        self._port = port
+
+    def streamable_http_app(self, **overrides: Any):  # type: ignore[override]
+        return super().streamable_http_app(**{**self._transport_options, **overrides})
+
+    def serve(self) -> None:
+        """Run over Streamable HTTP with the options decided in ``build_server``."""
+        self.run(transport="streamable-http", port=self._port, **self._transport_options)
+
+
 def build_server(
     config: GatewayConfig,
     registry: Registry,
     *,
     http: httpx.AsyncClient | None = None,
-) -> FastMCP:
-    """Wrap a GatewayService into a stateless Streamable-HTTP FastMCP (TRN-1..3).
+) -> GatewayMCP:
+    """Wrap a GatewayService into a stateless Streamable-HTTP MCP server (TRN-1..3).
 
     Every tool resolves the caller's tier from the raw Authorization header via
     the ONE resolver (TIER-6); an UnauthorizedError from ``resolve`` becomes an
@@ -270,21 +292,23 @@ def build_server(
             allowed_hosts=list(config.allowed_hosts),
         )
 
-    server = FastMCP(
+    server = GatewayMCP(
         name="bridge-gateway",
-        host=config.host,
+        transport_options={
+            "host": config.host,
+            "stateless_http": True,
+            "json_response": True,
+            "streamable_http_path": "/mcp",
+            "transport_security": transport_security,
+        },
         port=config.port,
-        stateless_http=True,
-        json_response=True,
-        streamable_http_path="/mcp",
-        transport_security=transport_security,
     )
 
     def resolve_tier(ctx: Context) -> AccessTier:
-        # TRN-3: verified header path on mcp==1.28.1 (get_http_request()
-        # does not exist there). Headers are case-insensitive in Starlette.
-        header = ctx.request_context.request.headers.get("authorization")
-        return service.resolver.resolve(header)
+        # TRN-3: mcp 2.x exposes the HTTP request headers on the Context itself
+        # (None on stdio). Headers are case-insensitive in Starlette.
+        headers = ctx.headers or {}
+        return service.resolver.resolve(headers.get("authorization"))
 
     @server.tool()
     async def list_bridges(ctx: Context) -> ListBridgesResult:
@@ -367,4 +391,4 @@ def main(argv: list[str] | None = None) -> None:
         config = replace(config, port=args.port)
 
     registry = load_registry(config.registry_path)
-    build_server(config, registry).run(transport="streamable-http")
+    build_server(config, registry).serve()

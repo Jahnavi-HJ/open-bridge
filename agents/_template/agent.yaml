@@ -49,7 +49,27 @@ timeout: 90
 #     purposes (still used for allowed_tools substitution). NEVER set this on an
 #     agent whose host (below) is reachable from outside the machine — the loader
 #     warns at startup if it is, but does not refuse to start.
+#
+#   peer — the inner face for a Bridge you do NOT fully trust with your repo: a
+#     colleague's or partner's Bridge asking yours. Hardened exactly like public
+#     (cwd = grounding_dir, which here is a curated share folder), and the JSON-RPC
+#     endpoint answers only callers listed under auth: below. Refuses to start
+#     without an auth: block. Put it behind a private network (e.g. tailscale serve,
+#     tailnet only), never a public tunnel.
 trust: "public"
+
+# Peer authentication (required for trust: peer, optional otherwise). The card then
+# declares an HTTP bearer scheme; the card itself stays readable without a token.
+# Tokens live in the environment (fill them from your secret store in the launch
+# wrapper), never in this file; the loader refuses a raw `token:` key, a missing or
+# a token under 32 characters. tailscale_login additionally binds a token to the
+# identity `tailscale serve` asserts, so a copied token alone is not enough.
+# auth:
+#   mode: bearer
+#   peers:
+#     - id: <peer-name>
+#       token_env: AGENT_PEER_TOKEN_<PEER>
+#       tailscale_login: <login@of-the-peer>
 
 # Grounding = the PUBLIC content the agent may read. This is ALSO the agent's cwd
 # for a `public` agent (see trust: above), which confines Read/Glob/Grep to public

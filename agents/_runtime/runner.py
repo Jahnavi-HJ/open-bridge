@@ -145,6 +145,22 @@ def _build_env(context_id: str | None) -> dict[str, str] | None:
     return {**os.environ, "AGENT_CONTEXT_ID": context_id}
 
 
+class ClaudeRunError(RuntimeError):
+    """claude finished but reported an error itself (``is_error`` on the result).
+
+    Raised instead of handing the error text on as an answer. Measured 2026-09-27: a
+    claude process without credentials ends with ``"Not logged in · Please run
+    /login"`` as its result text, and a caller took that for the agent's reply. The
+    executor turns this into a FAILED task.
+    """
+
+
+def _raise_if_error(evt: dict) -> None:
+    if evt.get("is_error"):
+        detail = str(evt.get("result") or evt.get("subtype") or "unknown error")
+        raise ClaudeRunError(detail[:300])
+
+
 class SubprocessClaudeRunner:
     """Run ``claude -p <prompt> --output-format json ...`` and return the answer."""
 
@@ -274,14 +290,17 @@ class SubprocessClaudeRunner:
 
         try:
             data = json.loads(raw)
-            result = data.get("result") or data.get("text") or ""
-            if result:
-                return result
-            logger.warning("claude_runner: json has no .result field: %s", list(data.keys()))
-            return raw
         except json.JSONDecodeError:
             logger.warning("claude_runner: stdout was not JSON, using raw")
             return raw
+        if not isinstance(data, dict):
+            return raw
+        _raise_if_error(data)
+        result = data.get("result") or data.get("text") or ""
+        if result:
+            return result
+        logger.warning("claude_runner: json has no .result field: %s", list(data.keys()))
+        return raw
 
     async def stream(
         self,
@@ -338,6 +357,7 @@ class SubprocessClaudeRunner:
 
                 etype = evt.get("type")
                 if etype == "result":
+                    _raise_if_error(evt)
                     answer = evt.get("result") or evt.get("text") or ""
                     if self._trust == "private":
                         session_id = evt.get("session_id")

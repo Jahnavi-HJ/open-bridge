@@ -26,6 +26,8 @@ import asyncio
 import json
 import time
 
+import pytest
+
 from _runtime.runner import (
     _DISALLOWED_TOOLS,
     _PRIVATE_DISALLOWED_TOOLS,
@@ -521,3 +523,40 @@ async def test_public_trust_stream_never_yields_session_id_event(monkeypatch):
     ))
     events = await _collect(_runner(trust="public"))
     assert not [e for e in events if e.get("kind") == "session_id"]
+
+
+# ---------------------------------------------------------------------------
+# An error reported by claude itself is a failure, never an answer
+# ---------------------------------------------------------------------------
+# Measured 2026-09-27: a claude process without credentials (started over ssh, no
+# keychain) ends with {"type":"result","is_error":true,"result":"Not logged in ..."}.
+# The runner used to hand that text on as the answer, so the task ended COMPLETED
+# and a calling Bridge took "Not logged in" for the peer's reply.
+
+def _error_result(text: str) -> dict:
+    return {"type": "result", "subtype": "success", "is_error": True, "result": text}
+
+
+async def test_stream_raises_when_claude_reports_an_error(monkeypatch):
+    from _runtime.runner import ClaudeRunError
+
+    _patch(monkeypatch, reader_factory=lambda limit: _streamreader(
+        [_line(_error_result("Not logged in · Please run /login"))], limit=limit,
+    ))
+    with pytest.raises(ClaudeRunError, match="Not logged in"):
+        await _collect(_runner())
+
+
+async def test_buffered_call_raises_when_claude_reports_an_error(monkeypatch):
+    from _runtime.runner import ClaudeRunError
+
+    class _CommProc(_FakeProc):
+        async def communicate(self):
+            return json.dumps(_error_result("Not logged in · Please run /login")).encode(), b""
+
+    async def fake_exec(*args, **kwargs):
+        return _CommProc(None)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    with pytest.raises(ClaudeRunError):
+        await _runner()("hi")

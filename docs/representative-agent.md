@@ -55,6 +55,17 @@ loader warns (does not refuse to start) if a `private` agent binds a non-loopbac
 host. See the annotated `trust:` field in `agents/_template/agent.yaml` for the
 full comparison table.
 
+Between the two sits `trust: peer`, for another person's Bridge asking yours: the
+caller is known but not trusted with your repo. It keeps the outer face's hardening
+(cwd = a curated share folder, strict tools) and adds authentication: an `auth:`
+block with one bearer token per peer, optionally bound to a network identity asserted
+by a local proxy (`Tailscale-User-Login` from `tailscale serve`). The JSON-RPC
+endpoint refuses every other caller (401, or 403 when a valid token arrives from the
+wrong identity), the card declares the scheme, and the loader refuses to start a
+`peer` agent without the block or with a token it cannot find. The seam is
+`agents/_runtime/auth.py`; replacing static tokens with OIDC later changes that
+module only.
+
 ## 2. Instance anatomy
 
 Copy the template to start an instance:

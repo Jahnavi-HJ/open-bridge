@@ -12,6 +12,10 @@ from a2a.types import (
     AgentInterface,
     AgentProvider,
     AgentSkill,
+    HTTPAuthSecurityScheme,
+    SecurityRequirement,
+    SecurityScheme,
+    StringList,
 )
 from a2a.utils import TransportProtocol
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT
@@ -40,6 +44,19 @@ def build_agent_card(cfg: AgentConfig) -> AgentCard:
             url=cfg.provider.get("url", ""),
         )
 
+    # Say what a caller needs before it asks. Only when auth is on: an open agent
+    # declaring a scheme it does not enforce would be the dishonest direction.
+    security_schemes = {}
+    security_requirements = []
+    if cfg.auth.enabled:
+        security_schemes["bearer"] = SecurityScheme(
+            http_auth_security_scheme=HTTPAuthSecurityScheme(
+                scheme="Bearer",
+                description="Per-peer token issued by the operator of this Bridge.",
+            )
+        )
+        security_requirements.append(SecurityRequirement(schemes={"bearer": StringList()}))
+
     return AgentCard(
         name=cfg.name,
         # A folded YAML block (``description: >``) leaves a trailing newline; the
@@ -67,4 +84,6 @@ def build_agent_card(cfg: AgentConfig) -> AgentCard:
         default_input_modes=["text"],
         default_output_modes=["text"],
         skills=skills,
+        security_schemes=security_schemes,
+        security_requirements=security_requirements,
     )

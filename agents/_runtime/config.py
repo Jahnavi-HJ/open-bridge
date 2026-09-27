@@ -18,6 +18,8 @@ from pathlib import Path
 
 import yaml
 
+from .auth import AuthConfig, parse_auth
+
 logger = logging.getLogger(__name__)
 
 # config.py → agents/_runtime/config.py ; parents[2] = repo root (contains agents/)
@@ -26,9 +28,11 @@ AGENTS_DIR = PROJECT_ROOT / "agents"
 
 _DEV_ENVIRONMENTS = {"local", "dev", "development", "test"}
 
-# trust: public | private — see § Trust profile below. Anything else (unset,
+# trust: public | private | peer — see § Trust profile below. Anything else (unset,
 # blank, typo) MUST fail closed to "public"; never silently widen an agent.
-_VALID_TRUST = frozenset({"public", "private"})
+# ``peer`` is hardened exactly like ``public`` (grounding-dir cwd, strict tools) and
+# additionally requires an ``auth:`` block: it answers only Bridges it knows.
+_VALID_TRUST = frozenset({"public", "private", "peer"})
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 # Soft ceiling per embedded grounding file — a runaway file must not blow up the
@@ -112,6 +116,7 @@ class AgentConfig:
     skills: list[dict]
     system_prompt: str
     trust: str = "public"
+    auth: AuthConfig = field(default_factory=AuthConfig)
     project_root: str = field(default=str(PROJECT_ROOT))
 
 
@@ -193,6 +198,13 @@ def load_agent_config(instance: str, *, environment: str | None = None) -> Agent
             instance, host,
         )
 
+    auth = parse_auth(instance, spec.get("auth"))
+    if trust == "peer" and not auth.enabled:
+        raise ValueError(
+            f"agent '{instance}': trust: peer needs an auth: block (mode: bearer); "
+            "a peer endpoint without authentication would be a public one"
+        )
+
     # working_dir = cwd = read-confinement for the file tools. A public agent is
     # confined to its grounding dir; a private/trusted agent gets the full instance
     # repo root (CLAUDE.md, @-imports, .claude/skills) — see § Trust profile.
@@ -259,5 +271,6 @@ def load_agent_config(instance: str, *, environment: str | None = None) -> Agent
         skills=spec.get("skills") or [],
         system_prompt=system_prompt,
         trust=trust,
+        auth=auth,
         project_root=str(PROJECT_ROOT),
     )

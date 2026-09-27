@@ -71,6 +71,17 @@ trust: "public"
 #       token_env: AGENT_PEER_TOKEN_<PEER>
 #       tailscale_login: <login@of-the-peer>
 
+# Owner approval (optional, any trust level; made for trust: peer). Every finished
+# answer is held, the task stays WORKING with a waiting message, and nothing of the
+# answer streams out until `command` decides. The command gets one JSON object on
+# stdin (task_id, context_id, peer, question, answer, timeout_sec) and prints one:
+# {"decision": "approve"}, {"decision": "edit", "text": "..."}, {"decision":
+# "reject"} or {"decision": "timeout"}. Anything else fails closed. How the owner
+# is asked (messenger, push, web page) lives in that command, with the instance.
+# approval:
+#   command: ["python3", "${tools_dir}/approve.py"]
+#   timeout_sec: 3600
+
 # Grounding = the PUBLIC content the agent may read. This is ALSO the agent's cwd
 # for a `public` agent (see trust: above), which confines Read/Glob/Grep to public
 # content — never the bridge's private files. A public agent must never be able to

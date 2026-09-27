@@ -18,6 +18,7 @@ from pathlib import Path
 
 import yaml
 
+from .approval import ApprovalConfig, parse_approval
 from .auth import AuthConfig, parse_auth
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ class AgentConfig:
     system_prompt: str
     trust: str = "public"
     auth: AuthConfig = field(default_factory=AuthConfig)
+    approval: ApprovalConfig = field(default_factory=ApprovalConfig)
     project_root: str = field(default=str(PROJECT_ROOT))
 
 
@@ -230,6 +232,10 @@ def load_agent_config(instance: str, *, environment: str | None = None) -> Agent
         .replace("${instance_dir}", str(inst_dir.resolve()))
     )
 
+    # Owner approval before an answer leaves (see _runtime/approval.py). Resolved
+    # here so a broken block stops the start instead of every later answer.
+    approval = parse_approval(instance, spec.get("approval"), tools_dir=tools_dir)
+
     # Inline grounding: embed declared grounding files straight into the system
     # prompt so the agent answers from context — no Read/Grep round-trip per
     # question (the dominant source of public-widget latency). File tools stay
@@ -272,5 +278,6 @@ def load_agent_config(instance: str, *, environment: str | None = None) -> Agent
         system_prompt=system_prompt,
         trust=trust,
         auth=auth,
+        approval=approval,
         project_root=str(PROJECT_ROOT),
     )

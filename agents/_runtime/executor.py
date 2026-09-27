@@ -53,6 +53,9 @@ DEFAULT_MESSAGES = {
     "error": "Error: {error}",
     "cancelled": "Operation cancelled.",
     "no_running": "No running operation to cancel.",
+    "awaiting_approval": "The answer is ready and waits for its owner's approval.",
+    "rejected": "The owner did not release this answer.",
+    "approval_timeout": "The owner did not decide in time; nothing was released.",
 }
 
 # Role labels folded into the prompt transcript (kept ascii/neutral).
@@ -123,8 +126,15 @@ class ClaudeAgentExecutor(AgentExecutor):
         max_input_chars: int = 4000,
         max_contexts: int = 500,
         messages: dict | None = None,
+        approver=None,
     ) -> None:
         self._runner = runner
+        # Owner approval (see _runtime/approval.py). When set, a finished answer is
+        # held until the approver decides, and nothing of it streams out before.
+        self._approver = approver
+        # Tasks whose concurrency slot was handed back while waiting for approval,
+        # so ``execute`` does not release it a second time.
+        self._slot_returned: set[str] = set()
         self._history: OrderedDict[str, list[tuple[str, str]]] = OrderedDict()
         # claude's own session id per context, for --resume continuity (private
         # trust only — the runner ignores this for a public agent, so tracking it
@@ -194,7 +204,9 @@ class ClaudeAgentExecutor(AgentExecutor):
             return
 
         await self._concurrency.acquire()
-        run_task = asyncio.ensure_future(self._run(updater, context, user_text, runtime_context))
+        run_task = asyncio.ensure_future(
+            self._run(updater, context, user_text, runtime_context, peer=peer, slot_key=task.id)
+        )
         self._running[task.id] = run_task
         try:
             await run_task
@@ -206,7 +218,10 @@ class ClaudeAgentExecutor(AgentExecutor):
                 raise
         finally:
             self._running.pop(task.id, None)
-            self._concurrency.release()
+            if task.id in self._slot_returned:
+                self._slot_returned.discard(task.id)
+            else:
+                self._concurrency.release()
 
     async def _run(
         self,
@@ -214,8 +229,12 @@ class ClaudeAgentExecutor(AgentExecutor):
         context: RequestContext,
         user_text: str,
         runtime_context: str = "",
+        *,
+        peer: str | None = None,
+        slot_key: str | None = None,
     ) -> None:
         """Run one claude -p turn while holding a concurrency slot."""
+        held = self._approver is not None
         await updater.start_work(
             message=updater.new_agent_message([new_text_part(self._msg["working"])])
         )
@@ -265,6 +284,10 @@ class ClaudeAgentExecutor(AgentExecutor):
                     prompt, context_id=cid, resume_session_id=resume_id
                 ):
                     kind = evt.get("kind")
+                    if kind in ("step", "delta") and held:
+                        # Held for approval: a step label can name a file, a delta is
+                        # the answer itself. Neither leaves before the owner decides.
+                        continue
                     if kind == "step":
                         await updater.update_status(
                             TaskState.TASK_STATE_WORKING,
@@ -352,6 +375,13 @@ class ClaudeAgentExecutor(AgentExecutor):
             },
         )
 
+        if held:
+            answer = await self._await_approval(
+                updater, context, cid, user_text, answer, peer=peer, slot_key=slot_key
+            )
+            if answer is None:
+                return
+
         self._remember(cid, user_text, answer)
         await updater.add_artifact(
             [new_text_part(answer)], artifact_id=answer_artifact_id, name="answer"
@@ -359,6 +389,50 @@ class ClaudeAgentExecutor(AgentExecutor):
         await updater.complete(
             message=updater.new_agent_message([new_text_part(answer)])
         )
+
+    async def _await_approval(
+        self,
+        updater: TaskUpdater,
+        context: RequestContext,
+        cid: str,
+        question: str,
+        answer: str,
+        *,
+        peer: str | None,
+        slot_key: str | None,
+    ) -> str | None:
+        """Hold ``answer`` until the owner decides. Returns the text to send, or None."""
+        # The model's work is done; waiting on a person must not block other callers.
+        if slot_key and slot_key not in self._slot_returned:
+            self._slot_returned.add(slot_key)
+            self._concurrency.release()
+        await updater.update_status(
+            TaskState.TASK_STATE_WORKING,
+            message=updater.new_agent_message([new_text_part(self._msg["awaiting_approval"])]),
+        )
+        decision = await self._approver(
+            {
+                "task_id": context.task_id,
+                "context_id": cid,
+                "peer": peer,
+                "question": question,
+                "answer": answer,
+            }
+        )
+        logger.info(
+            "executor: approval decided",
+            extra={"task_id": context.task_id, "context_id": cid, "peer": peer,
+                   "verdict": decision.verdict},
+        )
+        if decision.verdict == "approve":
+            return answer
+        if decision.verdict == "edit":
+            return decision.text
+        key = "approval_timeout" if decision.verdict == "timeout" else "rejected"
+        await updater.reject(
+            message=updater.new_agent_message([new_text_part(self._msg[key])])
+        )
+        return None
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Abort an in-flight turn for ``context``'s task, if one is running."""

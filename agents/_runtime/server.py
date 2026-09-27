@@ -32,6 +32,7 @@ from a2a.utils import DEFAULT_RPC_URL
 from a2a.utils.error_handlers import build_error_details
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, VersionNotSupportedError
 
+from .approval import CommandApprover
 from .auth import PeerAuthBackend, on_auth_error, require_peer
 from .card import build_agent_card
 from .config import AgentConfig, load_agent_config
@@ -129,6 +130,7 @@ def build_app(cfg: AgentConfig) -> Starlette:
         max_input_chars=cfg.max_input_chars,
         max_contexts=cfg.max_contexts,
         messages=cfg.messages,
+        approver=CommandApprover(cfg.approval) if cfg.approval.enabled else None,
     )
     agent_card = build_agent_card(cfg)
 

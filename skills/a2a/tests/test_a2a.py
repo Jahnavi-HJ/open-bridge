@@ -170,6 +170,20 @@ def test_a_held_task_is_polled_until_it_finishes(monkeypatch):
     assert rec.calls[1]["body"]["method"] == "GetTask"
 
 
+def test_with_wait_the_send_does_not_block(monkeypatch):
+    rec = Recorder([(200, v1_task())])
+    monkeypatch.setattr(a2a, "http_json", rec)
+    a2a.ask(v1_card(), "Frage?", token="x" * 40, wait=60)
+    assert rec.calls[0]["body"]["params"]["configuration"] == {"returnImmediately": True}
+
+
+def test_without_wait_the_send_blocks(monkeypatch):
+    rec = Recorder([(200, v1_task())])
+    monkeypatch.setattr(a2a, "http_json", rec)
+    a2a.ask(v1_card(), "Frage?", token="x" * 40)
+    assert "configuration" not in rec.calls[0]["body"]["params"]
+
+
 def test_without_wait_a_held_task_is_returned_as_is(monkeypatch):
     monkeypatch.setattr(a2a, "http_json", Recorder([(200, v1_task(state="TASK_STATE_WORKING", text=""))]))
     assert a2a._state(a2a.ask(v1_card(), "Frage?", token="x" * 40)) == "working"

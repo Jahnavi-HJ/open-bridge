@@ -66,6 +66,12 @@ wrong identity), the card declares the scheme, and the loader refuses to start a
 `agents/_runtime/auth.py`; replacing static tokens with OIDC later changes that
 module only.
 
+A peer endpoint usually adds owner approval (`approval:` in `agent.yaml`,
+`agents/_runtime/approval.py`): every finished answer is held, the task stays
+WORKING with a waiting message, nothing of it streams out, and an instance-owned
+approver command decides: approve, edit, reject or timeout. Anything it cannot
+read fails closed.
+
 ## 2. Instance anatomy
 
 Copy the template to start an instance:

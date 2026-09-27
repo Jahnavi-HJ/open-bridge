@@ -25,7 +25,8 @@ folder, approval and classification stay as they are.
 
 ## Still to add on top
 
-- Approval by the owner before a sensitive answer leaves (task held in `WORKING`).
+- Approval by the owner before an answer leaves: available (`approval:` in
+  agent.yaml, see peer-agent.md step 4a); a held task survives no restart yet.
 - Classification of the finished answer against the connection's highest class, as
   an A2A extension with `required: true`.
 - Signed agent cards (JWS) so a caller can verify a card's origin.

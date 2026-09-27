@@ -192,7 +192,7 @@ def fetch_card(card_url: str, timeout: float = 20) -> dict:
 
 # ---------------------------------------------------------------------------- ask
 
-def build_payload(question: str, context_id: str | None, protocol: str) -> dict:
+def build_payload(question: str, context_id: str | None, protocol: str, *, nonblocking: bool = False) -> dict:
     msg_id = str(uuid.uuid4())
     if protocol.startswith("1."):
         message = {"role": "ROLE_USER", "messageId": msg_id, "parts": [{"text": question}]}
@@ -203,7 +203,14 @@ def build_payload(question: str, context_id: str | None, protocol: str) -> dict:
         name = "message/send"
     if context_id:
         message["contextId"] = context_id
-    return {"jsonrpc": "2.0", "id": msg_id, "method": name, "params": {"message": message}}
+    params: dict = {"message": message}
+    if nonblocking:
+        # Return at once and let the caller poll: a peer holding the task for its
+        # owner's approval would otherwise keep this HTTP request open for hours.
+        params["configuration"] = (
+            {"returnImmediately": True} if protocol.startswith("1.") else {"blocking": False}
+        )
+    return {"jsonrpc": "2.0", "id": msg_id, "method": name, "params": params}
 
 
 def _state(task: dict) -> str:
@@ -240,7 +247,7 @@ def ask(card: dict, question: str, *, token: str | None, context_id: str | None 
     protocol, url = card_endpoint(card)
     if not protocol.startswith(SUPPORTED_MAJORS):
         raise A2AError(f"unsupported protocol version {protocol or 'missing'}")
-    status, body = http_json(url, body=build_payload(question, context_id, protocol),
+    status, body = http_json(url, body=build_payload(question, context_id, protocol, nonblocking=wait > 0),
                              headers=_headers(protocol, token), timeout=timeout)
     if status in (401, 403):
         raise A2AError(f"peer refused the call ({status}): token missing, wrong, or bound to another identity")

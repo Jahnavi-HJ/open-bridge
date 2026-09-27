@@ -29,6 +29,11 @@ auth:
   peers:
 ${peers}
 
+# Owner approval: hold every answer until you release it (skills/a2a/references/peer-agent.md, step 4a).
+# approval:
+#   command: ["python3", "$${tools_dir}/approve.py"]
+#   timeout_sec: 3600
+
 grounding_dir: "agents/${name}/share"
 inline_grounding:
   - "*.md"

@@ -39,6 +39,17 @@ is missing, short, or written into agent.yaml.
 server. Run it under launchd or systemd. On macOS not over ssh: the keychain is not
 readable there, and `claude` is not logged in.
 
+## 4a. Approval by the owner (recommended)
+
+With an `approval:` block the runtime holds every finished answer, reports the task
+as WORKING ("waits for its owner's approval"), streams nothing of it, and frees the
+concurrency slot while it waits. It then runs your approver command: JSON in on
+stdin, one decision out on stdout (`approve`, `edit` with `text`, `reject`,
+`timeout`). A crash, garbage or silence past `timeout_sec` sends nothing. The
+approver is yours to write: a messenger note with a quoted reply, a push button, a
+page. Callers should ask with `a2a.sh ask <peer> "..." --wait <seconds>`, which sends
+without blocking and polls.
+
 ## 5. Publish on a private network only
 
 ```bash

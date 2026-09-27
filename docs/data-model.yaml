@@ -151,6 +151,14 @@ families:
     writer: "/secrets"
     read: named
 
+  - path: infra/a2a-peers/
+    object: "another Bridge or A2A agent this one may ask: card URL, auth, token reference"
+    island: "core: template, schema; user: entries; org: members' endpoints"
+    lives: [core, private, overlay]
+    references: ["credential_ref → a secret store, by URI"]
+    writer: "/a2a"
+    read: named
+
   - path: infra/object-stores/
     object: "where content that is not configuration lives, who reaches it, which class belongs in it"
     island: "core: template, schema; user: entries"

@@ -31,10 +31,31 @@ def test_build_app_returns_starlette_with_core_routes():
 
 
 def test_runs_against_newest_a2a_sdk():
-    # The runtime targets A2A spec v1.0 via a2a-sdk 1.x. Pin the floor to the
-    # current newest (1.1.0, 2026-05-29) so a downgrade below it fails CI.
+    # The runtime targets A2A spec v1.0.1 via a2a-sdk 1.x. Pin the floor to the
+    # current newest (1.1.5, 2026-09-21) so a downgrade below it fails CI.
     parts = tuple(int(x) for x in version("a2a-sdk").split(".")[:3])
-    assert parts >= (1, 1, 0), f"a2a-sdk must be >=1.1.0 (A2A v1.0), got {parts}"
+    assert parts >= (1, 1, 5), f"a2a-sdk must be >=1.1.5 (A2A v1.0), got {parts}"
+
+
+def test_cors_preflight_allows_the_a2a_version_header():
+    # A v1.0 client sends ``A2A-Version: 1.0`` on every JSON-RPC call. From a browser
+    # on another origin that header triggers a preflight, and a preflight that does
+    # not list it blocks the call before it reaches the server.
+    cfg = _cfg()
+    origin = "https://widget.example"
+    cfg.cors_origins = [origin]
+    client = TestClient(build_app(cfg))
+    response = client.options(
+        DEFAULT_RPC_URL,
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,a2a-version",
+        },
+    )
+    assert response.status_code == 200
+    allowed = response.headers["access-control-allow-headers"].lower()
+    assert "a2a-version" in allowed
 
 
 # --- version-mismatch reporting on the v0.3 compat path -----------------------

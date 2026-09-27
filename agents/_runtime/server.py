@@ -172,7 +172,9 @@ def build_app(cfg: AgentConfig) -> Starlette:
                 allow_origins=cfg.cors_origins,
                 allow_credentials=False,
                 allow_methods=["GET", "POST", "OPTIONS"],
-                allow_headers=["Content-Type"],
+                # ``A2A-Version`` rides on every v1.0 JSON-RPC call; a browser on
+                # another origin preflights it, and an unlisted header fails there.
+                allow_headers=["Content-Type", "A2A-Version"],
             )
         ],
     )

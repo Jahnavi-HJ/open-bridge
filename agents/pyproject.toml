@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Bridge-Agent runtime — generic claude -p + A2A server for persona-fronting agents"
 requires-python = ">=3.11"
 dependencies = [
-    "a2a-sdk>=1.1.0",
+    "a2a-sdk>=1.1.5",
     "sse-starlette>=2.0",   # a2a SSE streaming + v0.3 JSON-RPC compat
     "uvicorn>=0.35.0",
     "starlette>=0.37.0",

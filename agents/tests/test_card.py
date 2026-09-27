@@ -119,3 +119,14 @@ def test_card_served_at_canonical_well_known_path():
     assert WELL_KNOWN in paths                 # v1.0 canonical discovery path
     assert LEGACY_AGENT_CARD_PATH in paths     # legacy path alias, same v1.0 bytes
     assert "/health" in paths
+
+
+def test_served_card_text_carries_no_yaml_folding_whitespace():
+    # A folded YAML block (``description: >``) ends in a newline. The card is the
+    # agent's public self-description, read by peers and directories, so the served
+    # text must be the text, without the YAML artefact.
+    client = TestClient(build_app(_cfg()))
+    card = client.get(WELL_KNOWN).json()
+    assert card["description"] == card["description"].strip()
+    for skill in card.get("skills", []):
+        assert skill["description"] == skill["description"].strip()

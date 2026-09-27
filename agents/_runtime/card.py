@@ -24,7 +24,7 @@ def build_agent_card(cfg: AgentConfig) -> AgentCard:
         AgentSkill(
             id=s["id"],
             name=s.get("name", s["id"]),
-            description=s.get("description", ""),
+            description=s.get("description", "").strip(),
             tags=s.get("tags", []),
             input_modes=s.get("input_modes", ["text"]),
             output_modes=s.get("output_modes", ["text"]),
@@ -42,7 +42,9 @@ def build_agent_card(cfg: AgentConfig) -> AgentCard:
 
     return AgentCard(
         name=cfg.name,
-        description=cfg.description,
+        # A folded YAML block (``description: >``) leaves a trailing newline; the
+        # card is public self-description, so serve the text without it.
+        description=cfg.description.strip(),
         version=cfg.version,
         provider=provider,
         documentation_url=cfg.documentation_url,

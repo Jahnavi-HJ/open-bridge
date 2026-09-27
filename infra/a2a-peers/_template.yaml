@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=./_schema.yaml
+# A2A peer: another Bridge (or any A2A agent) this Bridge may ask.
+# Copy to infra/a2a-peers/<name>.yaml. Used by skills/a2a (`a2a.sh ask <name> ...`).
+#
+# The token is a secret REFERENCE, never a value (rules/secret-placement.md). The
+# a2a skill resolves it through skills/secrets `run`, so it never reaches a
+# command line, a log or the session.
+name: example-peer               # slug, must equal the filename
+scope: user                      # user for your own peers; org when an overlay ships the file
+summary: "<one line: whose Bridge this is and what you may ask it>"
+card_url: "https://<host>/.well-known/agent-card.json"
+auth: bearer                     # none | bearer
+credential_ref: "keychain://<service-name>"   # required with auth: bearer
+network: tailnet                 # tailnet | public, informational: how the endpoint is reached
+owner: "<person or team>"

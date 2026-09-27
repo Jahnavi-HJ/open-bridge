@@ -45,7 +45,7 @@ items:
     note: The entry file. Thin by design; it routes, it does not explain.
 
   AGENTS.md:
-    max_bytes: 33500
+    max_bytes: 33600
     note: >-
       The operating manual, and still the largest single always-on item. It
       routes; it does not restate. Every load-bearing pointer in it is a
@@ -86,6 +86,12 @@ items:
       and the answer usually sits in a skill reference nobody thought to open.
       A pointer that lives anywhere but here is found only by somebody who
       already knows where to look, which is the case the map exists for.
+      RAISED from 33500 on 2026-09-27 by 100 bytes for the `infra/a2a-peers/`
+      row, which costs 87 (shortened from 111 to fit): 16 bytes of headroom
+      after. The family names the agents this Bridge may call and where their
+      tokens are, and the `a2a` skill reads it. Its question, "whom can I ask,
+      and how do I authenticate", comes up when a user says "ask X's Bridge",
+      before any file about A2A has been read.
 
   ecosystem.yaml:
     optional: true

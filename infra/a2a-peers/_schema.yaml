@@ -1,0 +1,57 @@
+# A2A Peer Schema, JSON Schema Draft 2020-12 in YAML
+#
+# One other A2A agent this Bridge may call. Discovery is the glob
+# infra/a2a-peers/*.yaml minus `_`-prefixed files. Validated by
+# scripts/validate-bridge.py; skills/a2a/scripts/a2a.py enforces the same
+# refusals at run time (raw secret, non-reference credential, plain http).
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "https://bks-lab.github.io/open-bridge/schemas/a2a-peer.yaml"
+title: A2APeer
+description: |
+  Another Bridge or A2A agent: where its card is and how to authenticate to it.
+
+type: object
+required: [name, scope, card_url]
+additionalProperties: true
+
+properties:
+  name:
+    type: string
+    pattern: "^[a-z0-9][a-z0-9-]*$"
+    description: "Slug, matching the filename"
+  scope:
+    enum: [org, user, private]
+    description: |
+      Promote-routing scope. A peer names somebody's machine, so it is never core:
+      `user` for your own list, `org` when an org overlay ships it.
+  summary:
+    type: string
+  card_url:
+    type: string
+    pattern: "^(https://|http://(127\\.0\\.0\\.1|localhost)[:/])"
+    description: "The agent card. https only, loopback http for local tests."
+  auth:
+    enum: [none, bearer]
+    default: none
+  credential_ref:
+    type: string
+    pattern: "^(keychain|env|azure-keyvault|1password|keepass|vault|file)://\\S+$"
+    description: "A secret reference, never the token itself."
+  network:
+    enum: [tailnet, public]
+  owner:
+    type: string
+
+not:
+  anyOf:
+    - required: [token]
+    - required: [password]
+    - required: [secret]
+    - required: [api_key]
+
+if:
+  properties: {auth: {const: bearer}}
+  required: [auth]
+then:
+  required: [credential_ref]

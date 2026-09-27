@@ -119,6 +119,15 @@ SURFACES = [
         "exclude_prefixes": ["_"],
     },
     {
+        # An A2A peer: another agent this Bridge may call (skills/a2a). Validated
+        # so that a raw token, a credential that is not a reference, or a plain
+        # http card fails here rather than at the first call.
+        "name": "a2a-peer",
+        "schema": "infra/a2a-peers/_schema.yaml",
+        "instances": "infra/a2a-peers/*.yaml",
+        "exclude_prefixes": ["_"],
+    },
+    {
         # An object store: where content that is not configuration lives, and
         # which class of content belongs in it (docs/object-store.md). Validated
         # for the reason the secret stores are: a typo in `backend:` or a

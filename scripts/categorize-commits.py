@@ -166,7 +166,7 @@ PERSONAL_PATTERNS = [
 # to the path rule (user), so the read fails closed.
 _CLUSTER_WRAPPER_RE = re.compile(
     r"^(?:identity/(?:personas|mandants|accounts|contracts)"
-    r"|infra/(?:channels|remotes|secret-stores)"
+    r"|infra/(?:channels|remotes|secret-stores|a2a-peers)"
     r"|workflow/(?:contexts|projects))/"
     r"(?!_(?:schema|template))"
     r"[^/]+\.(?:yaml|md)$"

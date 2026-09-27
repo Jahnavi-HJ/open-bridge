@@ -1,0 +1,12 @@
+#!/bin/bash
+# Launch ${name}. Tokens come from your secret store into the environment; this
+# file holds only their NAMES. Run it under your service manager (launchd,
+# systemd), not over ssh: a macOS keychain is not readable from an ssh session.
+set -euo pipefail
+
+# One line per peer in agent.yaml (auth.peers[].token_env), for example:
+#   export AGENT_PEER_TOKEN_ALICE="$$(security find-generic-password -s ${name}-peer-alice -w)"
+
+export ENVIRONMENT=production
+cd "$$(dirname "$$0")/.."
+exec uv run python -m _runtime.server --agent ${name}

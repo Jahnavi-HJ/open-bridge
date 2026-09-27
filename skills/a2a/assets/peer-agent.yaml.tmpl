@@ -1,0 +1,50 @@
+# ${name}: an A2A agent that answers other Bridges only (trust: peer).
+# Scaffolded by `skills/a2a/a2a.sh new-agent`. Guide: skills/a2a/references/peer-agent.md
+#
+# The boundary holds at four places, strongest first:
+#   1. network: bind loopback, publish tailnet-only (`tailscale serve`), never a public tunnel
+#   2. authentication: trust: peer refuses to start without the auth block below
+#   3. reading: the agent sees share/ only (cwd AND the absolute paths in allowed_tools)
+#   4. instruction: system-prompt.md says which topics are in and out
+
+name: "${name}"
+description: >
+  <One line for the calling Bridge: what may it ask here, and what not?>
+version: "0.1.0"
+
+provider:
+  organization: "<your organisation>"
+  url: "<https://your.site>"
+
+public_url: "https://<machine>.<tailnet>.ts.net:<https-port>"
+host: "127.0.0.1"
+port: ${port}
+model: "sonnet"
+timeout: 150
+
+trust: peer
+
+auth:
+  mode: bearer
+  peers:
+${peers}
+
+grounding_dir: "agents/${name}/share"
+inline_grounding:
+  - "*.md"
+
+allowed_tools: "Read(/$${instance_dir}/share/**),Glob(/$${instance_dir}/share/**),Grep(/$${instance_dir}/share/**)"
+
+max_concurrency: 1
+max_input_chars: 4000
+max_turns: 12
+max_contexts: 50
+
+cors_origins: []
+
+skills:
+  - id: peer_qa
+    name: "<What peers may ask>"
+    description: >
+      <One sentence. Keep examples generic: the card is readable without a token.>
+    tags: [peer]

@@ -125,14 +125,14 @@ def main():
     # Assign each ASR segment the speaker whose turn it overlaps most (segment
     # level — phrase-length segments keep this accurate; merge never used words).
     #
-    # A segment that overlaps NO turn at all gets UNKNOWN_SPEAKER, not a guess.
+    # A segment that overlaps NO turn at all gets SPEAKER_UNKNOWN, not a guess.
     # This used to fall back to turns[0][2], the speaker of the meeting's FIRST
     # turn, which has nothing to do with the segment: diarization emits no turn
     # for a stretch it heard as non-speech, and whisper.cpp does emit
     # zero-or-near-zero-length segments there. Those lines were then printed with
     # a real participant's name in the transcript, indistinguishable from a
     # measured assignment. Rare (2 of 1127 on the recording that found this) and
-    # exactly the kind of rare that nobody checks. UNKNOWN_SPEAKER keeps the
+    # exactly the kind of rare that nobody checks. SPEAKER_UNKNOWN keeps the
     # SPEAKER_ prefix so merge_transcripts.py lists it under unknown_speakers
     # instead of participants.
     assigned = []

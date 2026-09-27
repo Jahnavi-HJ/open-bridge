@@ -387,6 +387,20 @@ jobs:
       - name: Prove every object-store test still bites
         run: bash skills/object-store/run-tests.sh --mutate
 
+  a2a-suite:
+    name: A2A Skill
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Hermetic: every HTTP call is stubbed, no keychain, no network. PyYAML
+      # reads the peer files, jsonschema holds the shipped template to its schema.
+      - name: Install test dependencies
+        run: pip install pyyaml pytest jsonschema
+
+      - name: Run the a2a skill suite
+        run: bash skills/a2a/run-tests.sh
+
   workspace-tests:
     name: Workspace Engine + Registry + Skill
     runs-on: ubuntu-latest

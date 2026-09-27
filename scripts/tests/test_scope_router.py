@@ -129,6 +129,11 @@ def synth_repo(tmp_path, monkeypatch):
     for name in ("homeserver", "workstation", "home-router", "ev-charger", "ds"):
         write(f"infra/remotes/{name}.yaml", f"name: {name}\nscope: user\n")
 
+    # infra/a2a-peers/ — an org overlay ships its members' peer endpoints, while
+    # a peer you added yourself stays yours.
+    write("infra/a2a-peers/colleague.yaml", "name: colleague\nscope: org\n")
+    write("infra/a2a-peers/my-test.yaml", "name: my-test\nscope: user\n")
+
     cc._LOGO_BY_THEME_CACHE = None
     monkeypatch.chdir(tmp_path)
     yield tmp_path
@@ -749,3 +754,14 @@ def test_the_instance_rows_of_the_question_map_are_user():
 
 def test_a_skills_other_references_still_ship():
     assert tier("skills/bridge-learn/references/review-workflow.md") == "core"
+
+
+def test_a2a_peers_route_by_their_declaration(synth_repo):
+    """An org peer reaches the overlay, a user peer and an undeclared one stay local."""
+    assert tier("infra/a2a-peers/colleague.yaml") == "org", (
+        "a peer declaring `scope: org` must export to the org overlay, or no colleague "
+        "ever learns the endpoint exists"
+    )
+    assert tier("infra/a2a-peers/my-test.yaml") == "user"
+    assert tier("infra/a2a-peers/undeclared.yaml") == "user"
+    assert tier("infra/a2a-peers/_template.yaml") == "core"

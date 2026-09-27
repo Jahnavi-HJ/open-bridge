@@ -161,6 +161,15 @@ class ClaudeAgentExecutor(AgentExecutor):
 
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
+        # Who is asking, for a peer-authenticated agent. The auth layer already
+        # decided; this only makes the decision visible next to the turn.
+        peer = _peer_of(context)
+        if peer:
+            logger.info(
+                "executor: peer request",
+                extra={"task_id": task.id, "context_id": task.context_id, "peer": peer},
+            )
+
         if not user_text:
             await updater.failed(
                 message=updater.new_agent_message([new_text_part(self._msg["empty"])])
@@ -536,3 +545,12 @@ class ClaudeAgentExecutor(AgentExecutor):
             lines += transcript + [""]
         lines.append(f"{ROLE_USER}: {user_text}")
         return "\n".join(lines)
+
+
+def _peer_of(context) -> str | None:
+    """Return the authenticated peer id behind ``context``, if any."""
+    call_context = getattr(context, "call_context", None)
+    user = getattr(call_context, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return None
+    return getattr(user, "user_name", None) or None

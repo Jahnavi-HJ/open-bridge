@@ -19,6 +19,7 @@ import click
 import uvicorn
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
+from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -31,6 +32,7 @@ from a2a.utils import DEFAULT_RPC_URL
 from a2a.utils.error_handlers import build_error_details
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, VersionNotSupportedError
 
+from .auth import PeerAuthBackend, on_auth_error, require_peer
 from .card import build_agent_card
 from .config import AgentConfig, load_agent_config
 from .executor import ClaudeAgentExecutor
@@ -152,21 +154,41 @@ def build_app(cfg: AgentConfig) -> Starlette:
             }
         )
 
+    rpc_routes = [
+        _with_spec_error_codes(r)
+        for r in create_jsonrpc_routes(
+            request_handler, DEFAULT_RPC_URL, enable_v0_3_compat=True
+        )
+    ]
+    if cfg.auth.enabled:
+        # Only the JSON-RPC surface is guarded: the card must stay readable so a
+        # caller can see which scheme it needs, and /health is for the operator.
+        rpc_routes = [
+            Route(r.path, require_peer(r.endpoint), methods=list(r.methods or ["POST"]))
+            for r in rpc_routes
+        ]
+
     routes = [
-        *(
-            _with_spec_error_codes(r)
-            for r in create_jsonrpc_routes(
-                request_handler, DEFAULT_RPC_URL, enable_v0_3_compat=True
-            )
-        ),
+        *rpc_routes,
         *create_agent_card_routes(agent_card),  # /.well-known/agent-card.json
         *create_agent_card_routes(agent_card, card_url=LEGACY_AGENT_CARD_PATH),
         Route("/health", health_endpoint, methods=["GET"]),
     ]
 
+    middleware = []
+    if cfg.auth.enabled:
+        middleware.append(
+            Middleware(
+                AuthenticationMiddleware,
+                backend=PeerAuthBackend(cfg.auth),
+                on_error=on_auth_error,
+            )
+        )
+
     return Starlette(
         routes=routes,
         middleware=[
+            *middleware,
             Middleware(
                 CORSMiddleware,
                 allow_origins=cfg.cors_origins,

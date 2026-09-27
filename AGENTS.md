@@ -202,7 +202,7 @@ one hop both ways, `--fix` rewrites a reference whose task merely moved KIND).
 | `infra/transcriptions/` | recording → transcript topology |
 | `infra/secret-stores/` | where a secret lives, who reaches it, and which kind belongs in it |
 | `infra/object-stores/` | where content that is not configuration lives: recordings, documents, exports |
-| `infra/a2a-peers/` | another Bridge or A2A agent this one may ask: card URL, auth, token reference |
+| `infra/a2a-peers/` | an A2A agent this Bridge may ask: card, auth, token reference |
 | `infra/utilities/` | a supply contract at a location: power, gas, water, heat |
 | `workflow/calendars/` | a scheduled outbound action |
 | `workflow/contexts/` | where a piece of work gets documented |
